@@ -327,3 +327,4 @@ Eski 800+ satırlık `worker.js` tabanlı backend kullanılmaz.
 Mevcut Cloudflare D1 veritabanı korunur ve yeni Worker `DB` binding'i üzerinden bu veritabanına bağlanır.
 
 Frontend, mobil uygulama ve gelecekteki masaüstü uygulaması aynı API mimarisini kullanacaktır.
+Cloudflare Workers deployment configuration
