@@ -26,7 +26,7 @@ export async function login(request: Request, env: Env) {
     id: number;
     email: string;
     full_name: string;
-    role: 'admin' | 'instructor' | 'student' | 'parent';
+    role: 'admin' | 'head_coach' | 'instructor' | 'parent' | 'student';
     active: number;
   }>();
 
