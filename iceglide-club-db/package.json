@@ -1,0 +1,20 @@
+{
+  "name": "iceglide-club-db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "itty-router": "^5.0.24"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260923.0",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.68.0"
+  }
+}

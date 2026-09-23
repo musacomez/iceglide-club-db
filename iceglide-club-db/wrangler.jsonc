@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "iceglide-club-db",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-23",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "iceglide-club-db",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
