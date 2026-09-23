@@ -320,6 +320,7 @@ GitHub'ın `main` branch'ine yeni bir commit gönderildiğinde Cloudflare Worker
 ## Önemli
 
 Bu repository IceGlide'ın yeni backend mimarisidir.
+Cloudflare build configuration updated.
 
 Eski 800+ satırlık `worker.js` tabanlı backend kullanılmaz.
 
