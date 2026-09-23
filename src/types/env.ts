@@ -4,9 +4,16 @@ export interface Env {
   CORS_ORIGIN?: string;
 }
 
+export type UserRole =
+  | 'admin'
+  | 'head_coach'
+  | 'instructor'
+  | 'parent'
+  | 'student';
+
 export interface AuthUser {
   id: number;
-  role: 'admin' | 'instructor' | 'student' | 'parent';
+  role: UserRole;
   full_name?: string;
   email?: string;
 }
