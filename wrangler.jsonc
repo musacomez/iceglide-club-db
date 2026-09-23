@@ -10,6 +10,9 @@
       "database_id": "ca4c3305-732e-4026-a38b-60046c66fa78"
     }
   ],
+  "vars": {
+    "AUTH_SECRET": "v9K2pL7mX4zQ1wR8jT3fN6bV5mS9sC0d"
+  },
   "observability": {
     "enabled": true
   }
