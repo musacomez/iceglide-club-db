@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "iceglide-club-db",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+      "database_id": "ca4c3305-732e-4026-a38b-60046c66fa78"
     }
   ],
   "observability": {
