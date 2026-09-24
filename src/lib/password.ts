@@ -34,7 +34,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const expected = fromBase64(hashText);
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: salt.buffer as ArrayBuffer, iterations, hash: 'SHA-256' },
     key,
     expected.byteLength * 8,
   );

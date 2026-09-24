@@ -24,6 +24,19 @@ function withAuth(handler: (request: CustomRequest, env: Env) => Promise<Respons
   };
 }
 
+function withRoles(
+  roles: NonNullable<CustomRequest['user']>['role'][],
+  handler: (request: CustomRequest, env: Env) => Promise<Response>,
+) {
+  return withAuth(async (request, env) => {
+    if (!request.user || !roles.includes(request.user.role)) {
+      return fail('Bu işlem için yetkiniz yok.', 403);
+    }
+
+    return handler(request, env);
+  });
+}
+
 router.get('/', () =>
   json({
     success: true,
@@ -36,7 +49,10 @@ router.get('/api/health', (_request: Request, env: Env) => health(env));
 router.post('/api/auth/login', (request: Request, env: Env) => login(request, env));
 
 router.get('/api/me', withAuth(me));
-router.get('/api/dashboard/summary', withAuth((_request, env) => dashboardSummary(env)));
+router.get(
+  '/api/dashboard/summary',
+  withRoles(['admin', 'head_coach'], (_request, env) => dashboardSummary(env)),
+);
 router.get('/api/students', withAuth(listStudents));
 router.get('/api/students/:id', withAuth(getStudent));
 router.get('/api/lessons', withAuth(listLessons));

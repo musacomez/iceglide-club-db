@@ -1,4 +1,4 @@
-import type { Env } from '../types/env';
+import type { Env, UserRole } from '../types/env';
 
 type AttendanceInput = {
   lesson_instance_id: number;
@@ -6,16 +6,34 @@ type AttendanceInput = {
   status: 'present' | 'absent' | 'late' | 'excused';
   note?: string | null;
   recorded_by_user_id: number;
+  recorded_by_role: UserRole;
 };
 
 export async function recordAttendance(env: Env, input: AttendanceInput) {
   const lesson = await env.DB.prepare(`
-    SELECT id, lesson_date, status
+    SELECT id, lesson_date, status, instructor_user_id
     FROM lesson_instances
     WHERE id = ?
-  `).bind(input.lesson_instance_id).first<{ id: number; lesson_date: string; status: string }>();
+  `).bind(input.lesson_instance_id).first<{
+    id: number;
+    lesson_date: string;
+    status: string;
+    instructor_user_id: number | null;
+  }>();
 
   if (!lesson) throw new Error('Ders bulunamadı.');
+
+  const canRecord =
+    input.recorded_by_role === 'admin' ||
+    input.recorded_by_role === 'head_coach' ||
+    (
+      input.recorded_by_role === 'instructor' &&
+      lesson.instructor_user_id === input.recorded_by_user_id
+    );
+
+  if (!canRecord) {
+    throw new Error('Bu ders için yoklama kaydetme yetkiniz yok.');
+  }
 
   const enrolled = await env.DB.prepare(`
     SELECT 1 AS ok

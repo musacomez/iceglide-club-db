@@ -33,6 +33,7 @@ export async function createAttendance(request: CustomRequest, env: Env) {
       status: body.status,
       note: body.note ?? null,
       recorded_by_user_id: request.user.id,
+      recorded_by_role: request.user.role,
     }));
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Yoklama kaydedilemedi.', 400);

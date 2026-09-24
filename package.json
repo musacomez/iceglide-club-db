@@ -7,13 +7,21 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "itty-router": "^5.0.24"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.2.4",
+    "@cloudflare/workers-types": "^5.20260923.1",
+    "@vitest/coverage-istanbul": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.11",
     "typescript": "^5.9.2",
+    "vitest": "^4.1.11",
     "wrangler": "^4.68.0"
   }
 }

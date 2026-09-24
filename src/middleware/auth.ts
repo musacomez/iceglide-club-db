@@ -52,16 +52,31 @@ export async function authenticate(
     return fail('Geçersiz veya süresi dolmuş token.', 401);
   }
 
+  const dbUser = await env.DB.prepare(`
+    SELECT id, email, full_name, role, active
+    FROM users
+    WHERE id = ?
+    LIMIT 1
+  `).bind(payload.sub).first<{
+    id: number;
+    email: string;
+    full_name: string;
+    role: UserRole;
+    active: number;
+  }>();
+
+  if (
+    !dbUser ||
+    dbUser.active !== 1 ||
+    dbUser.role !== payload.role
+  ) {
+    return fail('Geçersiz veya süresi dolmuş token.', 401);
+  }
+
   request.user = {
-    id: payload.sub,
-    role: payload.role,
-    full_name:
-      typeof payload.full_name === 'string'
-        ? payload.full_name
-        : undefined,
-    email:
-      typeof payload.email === 'string'
-        ? payload.email
-        : undefined,
+    id: dbUser.id,
+    role: dbUser.role,
+    full_name: dbUser.full_name,
+    email: dbUser.email,
   };
 }
