@@ -328,4 +328,5 @@ Mevcut Cloudflare D1 veritabanı korunur ve yeni Worker `DB` binding'i üzerinde
 
 Frontend, mobil uygulama ve gelecekteki masaüstü uygulaması aynı API mimarisini kullanacaktır.
 Cloudflare build configuration updated.
+Cloudflare build configuration updated.
 
