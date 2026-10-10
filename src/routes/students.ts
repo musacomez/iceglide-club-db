@@ -142,7 +142,8 @@ export async function getStudent(request: CustomRequest, env: Env) {
   }
 
   const student = await env.DB.prepare(`
-    SELECT s.*, l.name AS current_level, g.name AS current_group
+    SELECT s.*, l.name AS current_level, l.id AS current_level_id,
+           g.name AS current_group, g.id AS current_group_id
     FROM students s
     LEFT JOIN student_levels sl
       ON sl.student_id = s.id AND sl.end_date IS NULL

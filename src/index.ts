@@ -12,6 +12,9 @@ import { listStudentPackages } from './routes/packages';
 import { listStudentPayments } from './routes/payments';
 import { dashboardSummary } from './routes/dashboard';
 import { me } from './routes/me';
+import { createStudent, updateStudent } from './routes/students.write';
+import { createLesson, updateLesson } from './routes/lessons.write';
+import { getLookups } from './routes/lookups';
 
 const router = AutoRouter();
 
@@ -55,9 +58,14 @@ router.get(
 );
 router.get('/api/students', withAuth(listStudents));
 router.get('/api/students/:id', withAuth(getStudent));
+router.post('/api/students', withRoles(['admin', 'head_coach'], createStudent));
+router.patch('/api/students/:id', withRoles(['admin', 'head_coach'], updateStudent));
 router.get('/api/lessons', withAuth(listLessons));
 router.get('/api/lessons/:id', withAuth(getLesson));
 router.get('/api/lessons/:id/attendance', withAuth(attendanceList));
+router.post('/api/lessons', withRoles(['admin', 'head_coach'], createLesson));
+router.patch('/api/lessons/:id', withRoles(['admin', 'head_coach'], updateLesson));
+router.get('/api/lookups', withRoles(['admin', 'head_coach'], getLookups));
 router.post('/api/attendance', withAuth(createAttendance));
 router.get('/api/packages/student/:studentId', withAuth(listStudentPackages));
 router.get('/api/payments/student/:studentId', withAuth(listStudentPayments));
