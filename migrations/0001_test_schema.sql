@@ -8,6 +8,8 @@ CREATE TABLE users (
   role TEXT NOT NULL CHECK (role IN ('admin','head_coach','instructor','parent','student')),
   active INTEGER NOT NULL DEFAULT 1,
   password_hash TEXT NOT NULL,
+  auth_version INTEGER NOT NULL DEFAULT 0 CHECK (auth_version >= 0),
+  password_changed_at TEXT,
   last_login_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
