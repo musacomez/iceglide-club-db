@@ -22,4 +22,5 @@ export interface CustomRequest extends Request {
   params: Record<string, string>;
   query: Record<string, string>;
   user?: AuthUser;
+  authVersion?: number;
 }
