@@ -4,7 +4,7 @@ import { json, fail } from './lib/response';
 import { corsHeaders } from './lib/cors';
 import { authenticate } from './middleware/auth';
 import { health } from './routes/health';
-import { login } from './routes/auth';
+import { changePassword, login } from './routes/auth';
 import { listStudents, getStudent } from './routes/students';
 import { listLessons, getLesson, attendanceList } from './routes/lessons';
 import { createAttendance } from './routes/attendance';
@@ -50,6 +50,7 @@ router.get('/', () =>
 
 router.get('/api/health', (_request: Request, env: Env) => health(env));
 router.post('/api/auth/login', (request: Request, env: Env) => login(request, env));
+router.post('/api/auth/change-password', withAuth(changePassword));
 
 router.get('/api/me', withAuth(me));
 router.get(
