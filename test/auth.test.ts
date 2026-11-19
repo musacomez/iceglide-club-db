@@ -222,3 +222,66 @@ it('bozuk token payload 401 döner', async () => {
 
   expect(response.status).toBe(401);
 });
+
+function changePassword(token: string | undefined, currentPassword: string, newPassword: string) {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return SELF.fetch('https://iceglide.test/api/auth/change-password', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+describe('Password changes', () => {
+  const newPassword = 'IceGlide test passphrase 2026';
+
+  it('rejects unauthenticated requests and leaves sessions active after a wrong password', async () => {
+    expect((await changePassword(undefined, 'Test1234!', newPassword)).status).toBe(401);
+    const { token } = await login('student-a@test.invalid');
+    expect((await changePassword(token, 'wrong', newPassword)).status).toBe(422);
+    expect((await get('/api/me', token)).status).toBe(200);
+  });
+
+  it('preserves other accounts and revokes both legacy and current sessions for the changed account', async () => {
+    const { signToken } = await import('../src/lib/token');
+    const legacyToken = await signToken({
+      sub: 6,
+      role: 'student',
+      exp: Math.floor(Date.now() / 1000) + 120,
+    }, env.AUTH_SECRET!);
+    const { token, body } = await login('student-a@test.invalid');
+    const other = await login('parent-a@test.invalid');
+    expect(body.data).not.toHaveProperty('user.password_hash');
+    expect((await get('/api/me', legacyToken)).status).toBe(200);
+
+    expect((await changePassword(token, 'Test1234!', newPassword)).status).toBe(200);
+    expect((await get('/api/me', token)).status).toBe(401);
+    expect((await get('/api/me', legacyToken)).status).toBe(401);
+    expect((await get('/api/me', other.token)).status).toBe(200);
+    expect((await login('student-a@test.invalid')).response.status).toBe(401);
+    const changed = await login('student-a@test.invalid', newPassword);
+    expect(changed.response.status).toBe(200);
+    expect((await get('/api/me', changed.token)).status).toBe(200);
+    expect(await env.DB.prepare(
+      'SELECT auth_version, password_changed_at FROM users WHERE id = 6',
+    ).first()).toEqual({ auth_version: 1, password_changed_at: expect.any(String) });
+  });
+
+  it('limits password verification attempts per user', async () => {
+    const { token } = await login('student-a@test.invalid');
+    for (let i = 0; i < 5; i++) {
+      expect((await changePassword(token, 'wrong', newPassword)).status).toBe(422);
+    }
+    expect((await changePassword(token, 'Test1234!', newPassword)).status).toBe(429);
+  });
+
+  it('allows at most one of two overlapping changes with the same old password', async () => {
+    const { token } = await login('student-a@test.invalid');
+    const results = await Promise.all([
+      changePassword(token, 'Test1234!', newPassword),
+      changePassword(token, 'Test1234!', 'Another IceGlide test passphrase'),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 401]);
+  });
+});
