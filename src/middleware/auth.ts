@@ -1,6 +1,5 @@
 import type {
   Env,
-  AuthUser,
   CustomRequest,
   UserRole
 } from '../types/env';
@@ -52,8 +51,9 @@ export async function authenticate(
     return fail('Geçersiz veya süresi dolmuş token.', 401);
   }
 
+  const authVersion = payload.ver === undefined ? 0 : payload.ver;
   const dbUser = await env.DB.prepare(`
-    SELECT id, email, full_name, role, active
+    SELECT id, email, full_name, role, active, auth_version
     FROM users
     WHERE id = ?
     LIMIT 1
@@ -63,16 +63,19 @@ export async function authenticate(
     full_name: string;
     role: UserRole;
     active: number;
+    auth_version: number;
   }>();
 
   if (
     !dbUser ||
     dbUser.active !== 1 ||
-    dbUser.role !== payload.role
+    dbUser.role !== payload.role ||
+    dbUser.auth_version !== authVersion
   ) {
     return fail('Geçersiz veya süresi dolmuş token.', 401);
   }
 
+  request.authVersion = dbUser.auth_version;
   request.user = {
     id: dbUser.id,
     role: dbUser.role,
