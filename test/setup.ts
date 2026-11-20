@@ -10,6 +10,8 @@ async function seed() {
   await db.batch([
     db.prepare('DELETE FROM audit_logs'),
     db.prepare('DELETE FROM package_transactions'),
+    db.prepare('DELETE FROM ledger_transactions'),
+    db.prepare('DELETE FROM payment_allocations'),
     db.prepare('DELETE FROM student_charges'),
     db.prepare('DELETE FROM payments'),
     db.prepare('DELETE FROM attendances'),

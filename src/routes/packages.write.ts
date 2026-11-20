@@ -33,7 +33,7 @@ type AssignedPackage = {
 
 export async function listPackageTypes(_request: CustomRequest, env: Env) {
   const result = await env.DB.prepare(`
-    SELECT id, name, lesson_count, validity_days, price_cents
+    SELECT id, name, lesson_count, lessons_per_week, validity_days, price_cents
     FROM package_types WHERE ${ASSIGNABLE_TYPE}
     ORDER BY name, id
   `).all();

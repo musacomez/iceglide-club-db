@@ -177,7 +177,13 @@ CREATE TABLE payments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id INTEGER NOT NULL,
   package_id INTEGER,
-  amount REAL NOT NULL,
+  amount REAL,
+  payment_number TEXT UNIQUE,
+  amount_cents INTEGER,
+  payment_method TEXT,
+  description TEXT,
+  received_by_user_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'completed',
   payment_date TEXT NOT NULL,
   FOREIGN KEY (student_id) REFERENCES students(id),
   FOREIGN KEY (package_id) REFERENCES packages(id)
@@ -207,3 +213,21 @@ CREATE TABLE private_lesson_requests (
   id INTEGER PRIMARY KEY,
   status TEXT NOT NULL
 );
+
+CREATE TABLE ledger_transactions (
+  id INTEGER PRIMARY KEY,
+  transaction_number TEXT UNIQUE,
+  student_id INTEGER REFERENCES students(id),
+  payment_id INTEGER REFERENCES payments(id),
+  package_id INTEGER REFERENCES packages(id),
+  transaction_type TEXT NOT NULL CHECK (transaction_type IN ('income', 'refund', 'expense', 'adjustment')),
+  category TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  description TEXT,
+  transaction_date TEXT NOT NULL,
+  created_by_user_id INTEGER REFERENCES users(id)
+);
+
+CREATE UNIQUE INDEX uq_student_charges_monthly_due
+ON student_charges(student_id, period_start)
+WHERE charge_type = 'monthly_due' AND status = 'active';

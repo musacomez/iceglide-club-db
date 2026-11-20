@@ -103,7 +103,7 @@ export async function listStudents(request: CustomRequest, env: Env) {
       s.id, s.full_name, s.status, s.birth_date, s.phone, s.email,
       s.photo_url, s.registration_date,
       l.name AS current_level,
-      g.name AS current_group,
+      g.name AS current_group, gs.group_id AS current_group_id,
       u.email AS account_email
     FROM students s
     LEFT JOIN student_levels sl
