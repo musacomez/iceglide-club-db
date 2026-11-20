@@ -1,6 +1,35 @@
 import type { CustomRequest, Env } from '../types/env';
 import { fail, ok } from '../lib/response';
 
+const instructorNamesSql = `COALESCE((
+  SELECT json_group_array(full_name) FROM (
+    SELECT coach.full_name FROM json_each(li.additional_instructor_ids) AS extra
+    JOIN users coach ON coach.id = extra.value ORDER BY extra.key
+  )
+), '[]') AS additional_instructor_names`;
+
+type InstructorColumns = {
+  instructor_user_id: number | null;
+  instructor_name: string | null;
+  additional_instructor_ids: string;
+  additional_instructor_names: string;
+};
+
+function withInstructors<T extends InstructorColumns>(row: T) {
+  const { additional_instructor_ids, additional_instructor_names, ...lesson } = row;
+  return {
+    ...lesson,
+    instructor_user_ids: [
+      ...(row.instructor_user_id === null ? [] : [row.instructor_user_id]),
+      ...JSON.parse(additional_instructor_ids) as number[],
+    ],
+    instructor_names: [
+      ...(row.instructor_name ? [row.instructor_name] : []),
+      ...JSON.parse(additional_instructor_names) as string[],
+    ],
+  };
+}
+
 async function canAccessLesson(
   request: CustomRequest,
   env: Env,
@@ -21,7 +50,7 @@ async function canAccessLesson(
       SELECT 1
       FROM lesson_instances
       WHERE id = ?
-        AND instructor_user_id = ?
+        AND (instructor_user_id = ?2 OR ?2 IN (SELECT value FROM json_each(additional_instructor_ids)))
       LIMIT 1
     `).bind(lessonId, user.id).first();
 
@@ -99,7 +128,7 @@ export async function listLessons(request: CustomRequest, env: Env) {
     accessCondition = managementAccess.condition;
     accessParams = managementAccess.params;
   } else if (user.role === 'instructor') {
-    accessCondition = 'li.instructor_user_id = ?';
+    accessCondition = '(li.instructor_user_id = ?3 OR ?3 IN (SELECT value FROM json_each(li.additional_instructor_ids)))';
     accessParams = [user.id];
   } else if (user.role === 'parent') {
     accessCondition = `
@@ -136,7 +165,7 @@ export async function listLessons(request: CustomRequest, env: Env) {
       li.id, li.template_id, li.private_request_id, li.title, li.lesson_type,
       li.group_id, li.instructor_user_id, li.location_id, li.lesson_date,
       li.start_time, li.end_time, li.status, li.cancellation_reason, li.notes,
-      u.full_name AS instructor_name,
+      u.full_name AS instructor_name, li.additional_instructor_ids, ${instructorNamesSql},
       g.name AS group_name,
       l.name AS location_name
     FROM lesson_instances li
@@ -150,9 +179,9 @@ export async function listLessons(request: CustomRequest, env: Env) {
     from,
     to,
     ...accessParams,
-  ).all();
+  ).all<InstructorColumns>();
 
-  return ok(result.results);
+  return ok(result.results.map(withInstructors));
 }
 
 export async function getLesson(request: CustomRequest, env: Env) {
@@ -163,14 +192,14 @@ export async function getLesson(request: CustomRequest, env: Env) {
   }
 
   const lesson = await env.DB.prepare(`
-    SELECT li.*, u.full_name AS instructor_name,
+    SELECT li.*, u.full_name AS instructor_name, ${instructorNamesSql},
            g.name AS group_name, l.name AS location_name
     FROM lesson_instances li
     LEFT JOIN users u ON u.id = li.instructor_user_id
     LEFT JOIN groups g ON g.id = li.group_id
     LEFT JOIN locations l ON l.id = li.location_id
     WHERE li.id = ?
-  `).bind(id).first();
+  `).bind(id).first<InstructorColumns>();
 
   if (!lesson) {
     return fail('Ders bulunamadı.', 404);
@@ -197,7 +226,7 @@ export async function getLesson(request: CustomRequest, env: Env) {
   `).bind(id).all();
 
   return ok({
-    lesson,
+    lesson: withInstructors(lesson),
     students: students.results,
   });
 }

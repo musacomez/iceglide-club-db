@@ -11,14 +11,15 @@ type AttendanceInput = {
 
 export async function recordAttendance(env: Env, input: AttendanceInput) {
   const lesson = await env.DB.prepare(`
-    SELECT id, lesson_date, status, instructor_user_id
+    SELECT id, lesson_date, status,
+      (instructor_user_id = ?1 OR ?1 IN (SELECT value FROM json_each(additional_instructor_ids))) AS assigned
     FROM lesson_instances
     WHERE id = ?
-  `).bind(input.lesson_instance_id).first<{
+  `).bind(input.recorded_by_user_id, input.lesson_instance_id).first<{
     id: number;
     lesson_date: string;
     status: string;
-    instructor_user_id: number | null;
+    assigned: number | null;
   }>();
 
   if (!lesson) throw new Error('Ders bulunamadı.');
@@ -28,7 +29,7 @@ export async function recordAttendance(env: Env, input: AttendanceInput) {
     input.recorded_by_role === 'head_coach' ||
     (
       input.recorded_by_role === 'instructor' &&
-      lesson.instructor_user_id === input.recorded_by_user_id
+      lesson.assigned === 1
     );
 
   if (!canRecord) {

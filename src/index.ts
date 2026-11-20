@@ -18,6 +18,7 @@ import { dashboardSummary } from './routes/dashboard';
 import { me } from './routes/me';
 import { createStudent, updateStudent } from './routes/students.write';
 import { createLesson, updateLesson } from './routes/lessons.write';
+import { listCoaches, saveCoach } from './routes/coaches';
 import { getLookups } from './routes/lookups';
 
 const router = AutoRouter();
@@ -72,6 +73,9 @@ router.post('/api/lessons', withRoles(['admin', 'head_coach'], createLesson));
 router.patch('/api/lessons/:id', withRoles(['admin', 'head_coach'], updateLesson));
 router.post('/api/groups', withRoles(['admin', 'head_coach'], saveGroup));
 router.patch('/api/groups/:groupId', withRoles(['admin', 'head_coach'], saveGroup));
+router.get('/api/manage/coaches', withRoles(['admin'], listCoaches));
+router.post('/api/manage/coaches', withRoles(['admin'], saveCoach));
+router.patch('/api/manage/coaches/:coachId', withRoles(['admin'], saveCoach));
 router.get('/api/lookups', withRoles(['admin', 'head_coach'], getLookups));
 router.post('/api/attendance', withAuth(createAttendance));
 router.get('/api/packages/student/:studentId', withAuth(listStudentPackages));

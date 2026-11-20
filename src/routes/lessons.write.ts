@@ -22,6 +22,7 @@ interface LessonBody {
   lesson_type?: unknown;
   group_id?: unknown;
   instructor_user_id?: unknown;
+  instructor_user_ids?: unknown;
   location_id?: unknown;
   lesson_date?: unknown;
   start_time?: unknown;
@@ -60,7 +61,7 @@ function nullableText(v: unknown, max: number): string | null | undefined | 'inv
 
 async function validateRefs(
   env: Env,
-  refs: { group_id?: number | null; instructor_user_id?: number | null; location_id?: number | null },
+  refs: { group_id?: number | null; instructor_user_ids?: number[]; location_id?: number | null },
   studentIds: number[] | undefined,
 ): Promise<string | null> {
   if (refs.group_id) {
@@ -73,12 +74,13 @@ async function validateRefs(
       return 'Seçilen lokasyon bulunamadı.';
     }
   }
-  if (refs.instructor_user_id) {
-    const r = await env.DB.prepare(`
-      SELECT 1 AS x FROM users
-      WHERE id = ? AND role IN ('instructor','head_coach') AND active = 1
-    `).bind(refs.instructor_user_id).first();
-    if (!r) return 'Seçilen eğitmen bulunamadı veya aktif değil.';
+  if (refs.instructor_user_ids?.length) {
+    const ids = refs.instructor_user_ids;
+    const row = await env.DB.prepare(`
+      SELECT COUNT(*) AS n FROM users
+      WHERE id IN (${placeholders(ids.length)}) AND role IN ('instructor','head_coach') AND active = 1
+    `).bind(...ids).first<{ n: number }>();
+    if (row?.n !== ids.length) return 'Seçilen antrenörlerden biri bulunamadı veya aktif değil.';
   }
   if (studentIds && studentIds.length) {
     const row = await env.DB.prepare(
@@ -95,7 +97,7 @@ async function findConflicts(
     dates: string[];
     start_time: string;
     end_time: string;
-    instructor_user_id: number | null;
+    instructor_user_ids: number[];
     student_ids: number[];
     excludeLessonId?: number;
   },
@@ -104,17 +106,23 @@ async function findConflicts(
   const exclude = input.excludeLessonId ?? 0;
 
   for (const date of input.dates) {
-    if (input.instructor_user_id) {
+    if (input.instructor_user_ids.length) {
       const rows = await env.DB.prepare(`
         SELECT id, title, lesson_date, start_time, end_time
         FROM lesson_instances
-        WHERE instructor_user_id = ?
+        WHERE (
+          instructor_user_id IN (SELECT value FROM json_each(?1))
+          OR EXISTS (
+            SELECT 1 FROM json_each(additional_instructor_ids) assigned
+            WHERE assigned.value IN (SELECT value FROM json_each(?1))
+          )
+        )
           AND lesson_date = ?
           AND status != 'cancelled'
           AND id != ?
           AND start_time < ?
           AND end_time > ?
-      `).bind(input.instructor_user_id, date, exclude, input.end_time, input.start_time)
+      `).bind(JSON.stringify(input.instructor_user_ids), date, exclude, input.end_time, input.start_time)
         .all<{ id: number; title: string; lesson_date: string; start_time: string; end_time: string }>();
       for (const r of rows.results) {
         conflicts.push({ kind: 'instructor', lesson_id: r.id, title: r.title, lesson_date: r.lesson_date, start_time: r.start_time, end_time: r.end_time });
@@ -170,6 +178,10 @@ export async function createLesson(request: CustomRequest, env: Env) {
   if ([lessonType, notes, groupId, instructorId, locationId].includes('invalid')) {
     return fail('Gönderilen alanlardan biri geçersiz.', 422);
   }
+  const requestedInstructors = body.instructor_user_ids === undefined ? undefined : uniqueInts(body.instructor_user_ids);
+  if (requestedInstructors === null || (requestedInstructors && (
+    requestedInstructors.length > 20 || !requestedInstructors.every(Number.isSafeInteger)
+  ))) return fail('Geçerli en fazla 20 antrenör seçin.', 422);
 
   let studentIds: number[] = [];
   if (body.student_ids !== undefined) {
@@ -190,9 +202,10 @@ export async function createLesson(request: CustomRequest, env: Env) {
   const startTime: string = body.start_time;
   const endTime: string = body.end_time;
 
+  const instructors = requestedInstructors ?? (typeof instructorId === 'number' ? [instructorId] : []);
   const refs = {
     group_id: groupId as number | null | undefined,
-    instructor_user_id: instructorId as number | null | undefined,
+    instructor_user_ids: instructors,
     location_id: locationId as number | null | undefined,
   };
   const refError = await validateRefs(env, refs, studentIds);
@@ -205,7 +218,7 @@ export async function createLesson(request: CustomRequest, env: Env) {
       dates,
       start_time: startTime,
       end_time: endTime,
-      instructor_user_id: refs.instructor_user_id ?? null,
+      instructor_user_ids: instructors,
       student_ids: studentIds,
     });
     if (conflicts.length) {
@@ -219,18 +232,19 @@ export async function createLesson(request: CustomRequest, env: Env) {
       env.DB.prepare(`
         INSERT INTO lesson_instances
           (title, lesson_type, group_id, instructor_user_id, location_id,
-           lesson_date, start_time, end_time, status, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)
+           lesson_date, start_time, end_time, status, notes, additional_instructor_ids)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)
       `).bind(
         title,
         (lessonType as string | null | undefined) ?? 'group',
         refs.group_id ?? null,
-        refs.instructor_user_id ?? null,
+        instructors[0] ?? null,
         refs.location_id ?? null,
         date,
         startTime,
         endTime,
         (notes as string | null | undefined) ?? null,
+        JSON.stringify(instructors.slice(1)),
       ),
     ),
   );
@@ -281,11 +295,11 @@ export async function updateLesson(request: CustomRequest, env: Env) {
   if (!body || typeof body !== 'object') return fail('Geçersiz JSON.', 400);
 
   const current = await env.DB.prepare(`
-    SELECT id, title, lesson_date, start_time, end_time, instructor_user_id, status
+    SELECT id, title, lesson_date, start_time, end_time, instructor_user_id, additional_instructor_ids, status
     FROM lesson_instances WHERE id = ?
   `).bind(id).first<{
     id: number; title: string; lesson_date: string; start_time: string;
-    end_time: string; instructor_user_id: number | null; status: string;
+    end_time: string; instructor_user_id: number | null; additional_instructor_ids: string; status: string;
   }>();
   if (!current) return fail('Ders bulunamadı.', 404);
 
@@ -306,10 +320,25 @@ export async function updateLesson(request: CustomRequest, env: Env) {
   if ([lessonType, notes, groupId, instructorId, locationId].includes('invalid')) {
     return fail('Gönderilen alanlardan biri geçersiz.', 422);
   }
+  const requestedInstructors = body.instructor_user_ids === undefined ? undefined : uniqueInts(body.instructor_user_ids);
+  if (requestedInstructors === null || (requestedInstructors && (
+    requestedInstructors.length > 20 || !requestedInstructors.every(Number.isSafeInteger)
+  ))) return fail('Geçerli en fazla 20 antrenör seçin.', 422);
+
   if (lessonType !== undefined) { sets.push('lesson_type = ?'); params.push(lessonType); }
   if (notes !== undefined) { sets.push('notes = ?'); params.push(notes); }
   if (groupId !== undefined) { sets.push('group_id = ?'); params.push(groupId); }
-  if (instructorId !== undefined) { sets.push('instructor_user_id = ?'); params.push(instructorId); }
+  const previousAdditional = JSON.parse(current.additional_instructor_ids) as number[];
+  const previousInstructors = current.instructor_user_id === null
+    ? previousAdditional : [current.instructor_user_id, ...previousAdditional];
+  const instructors = requestedInstructors ?? (instructorId === undefined ? previousInstructors : [
+    ...(typeof instructorId === 'number' ? [instructorId] : []),
+    ...previousAdditional.filter((coach) => coach !== instructorId),
+  ]);
+  if (requestedInstructors !== undefined || instructorId !== undefined) {
+    sets.push('instructor_user_id = ?', 'additional_instructor_ids = ?');
+    params.push(instructors[0] ?? null, JSON.stringify(instructors.slice(1)));
+  }
   if (locationId !== undefined) { sets.push('location_id = ?'); params.push(locationId); }
 
   let date = current.lesson_date;
@@ -377,7 +406,7 @@ export async function updateLesson(request: CustomRequest, env: Env) {
     env,
     {
       group_id: groupId as number | null | undefined,
-      instructor_user_id: instructorId as number | null | undefined,
+      instructor_user_ids: instructors.filter((coach) => !previousInstructors.includes(coach)),
       location_id: locationId as number | null | undefined,
     },
     undefined,
@@ -428,13 +457,13 @@ export async function updateLesson(request: CustomRequest, env: Env) {
   // Çakışma kontrolü: zaman/eğitmen/öğrenci değiştiyse ve ders iptal değilse
   const affectsSchedule =
     body.lesson_date !== undefined || body.start_time !== undefined || body.end_time !== undefined ||
-    instructorId !== undefined || studentIds !== undefined || (body.status !== undefined && current.status === 'cancelled');
+    requestedInstructors !== undefined || instructorId !== undefined || studentIds !== undefined || (body.status !== undefined && current.status === 'cancelled');
   if (nextStatus !== 'cancelled' && affectsSchedule && body.allow_conflict !== true) {
     const conflicts = await findConflicts(env, {
       dates: [date],
       start_time: start,
       end_time: end,
-      instructor_user_id: instructorId !== undefined ? (instructorId as number | null) : current.instructor_user_id,
+      instructor_user_ids: instructors,
       student_ids: finalStudentIds,
       excludeLessonId: id,
     });
