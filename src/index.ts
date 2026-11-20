@@ -9,6 +9,7 @@ import { listStudents, getStudent } from './routes/students';
 import { listLessons, getLesson, attendanceList } from './routes/lessons';
 import { createAttendance } from './routes/attendance';
 import { listStudentPackages } from './routes/packages';
+import { assignStudentPackage, listPackageTypes } from './routes/packages.write';
 import { listStudentPayments } from './routes/payments';
 import { dashboardSummary } from './routes/dashboard';
 import { me } from './routes/me';
@@ -69,6 +70,8 @@ router.patch('/api/lessons/:id', withRoles(['admin', 'head_coach'], updateLesson
 router.get('/api/lookups', withRoles(['admin', 'head_coach'], getLookups));
 router.post('/api/attendance', withAuth(createAttendance));
 router.get('/api/packages/student/:studentId', withAuth(listStudentPackages));
+router.get('/api/packages/types', withRoles(['admin', 'head_coach'], listPackageTypes));
+router.post('/api/packages/student/:studentId', withRoles(['admin', 'head_coach'], assignStudentPackage));
 router.get('/api/payments/student/:studentId', withAuth(listStudentPayments));
 
 router.all('*', () => fail('API endpoint bulunamadı.', 404));

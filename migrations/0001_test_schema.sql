@@ -115,22 +115,45 @@ CREATE TABLE attendances (
 CREATE TABLE package_types (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
-  lesson_count INTEGER NOT NULL
+  lesson_count INTEGER NOT NULL,
+  validity_days INTEGER,
+  price_cents INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE packages (
   id INTEGER PRIMARY KEY,
   student_id INTEGER NOT NULL,
   package_type_id INTEGER NOT NULL,
-  package_number TEXT,
+  package_number TEXT UNIQUE,
   status TEXT NOT NULL DEFAULT 'active',
+  total_lessons INTEGER NOT NULL DEFAULT 0,
   remaining_lessons INTEGER NOT NULL DEFAULT 0,
+  price_cents INTEGER NOT NULL DEFAULT 0,
   starts_at TEXT,
   expires_at TEXT,
   purchased_at TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (student_id) REFERENCES students(id),
   FOREIGN KEY (package_type_id) REFERENCES package_types(id)
+);
+
+CREATE TABLE student_charges (
+  id INTEGER PRIMARY KEY,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE RESTRICT,
+  charge_type TEXT NOT NULL CHECK (charge_type IN ('monthly_due', 'package', 'private_lesson')),
+  description TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL CHECK (typeof(amount_cents) = 'integer' AND amount_cents > 0),
+  period_start TEXT,
+  due_date TEXT,
+  package_id INTEGER UNIQUE REFERENCES packages(id) ON DELETE RESTRICT,
+  lesson_instance_id INTEGER REFERENCES lesson_instances(id) ON DELETE RESTRICT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'cancelled')),
+  created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK ((charge_type = 'monthly_due') = (period_start IS NOT NULL)),
+  CHECK ((charge_type = 'package') = (package_id IS NOT NULL)),
+  CHECK (lesson_instance_id IS NULL OR charge_type = 'private_lesson')
 );
 
 CREATE TABLE package_transactions (
