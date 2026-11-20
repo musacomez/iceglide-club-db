@@ -1,0 +1,217 @@
+diff --git a/src/index.ts b/src/index.ts
+index ac4b5eb..b768818 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -10,6 +10,7 @@ import { listLessons, getLesson, attendanceList } from './routes/lessons';
+ import { createAttendance } from './routes/attendance';
+ import { listStudentPackages } from './routes/packages';
+ import { assignStudentPackage, listPackageTypes } from './routes/packages.write';
++import { adjustPackageLessons } from './routes/package-adjustments';
+ import { saveGroup } from './routes/groups';
+ import { listManagedPackageTypes, savePackageType } from './routes/package-types';
+ import { listCharges, createCharge, cancelCharge, receivePayment } from './routes/finance';
+@@ -80,6 +81,8 @@ router.post('/api/manage/package-types', withRoles(['admin'], savePackageType));
+ router.patch('/api/manage/package-types/:typeId', withRoles(['admin'], savePackageType));
+ router.get('/api/packages/types', withRoles(['admin', 'head_coach'], listPackageTypes));
+ router.post('/api/packages/student/:studentId', withRoles(['admin', 'head_coach'], assignStudentPackage));
++router.post('/api/packages/student/:studentId/:packageId/lesson-adjustments',
++  withRoles(['admin', 'head_coach'], adjustPackageLessons));
+ router.get('/api/finance/student/:studentId/charges', withRoles(['admin'], listCharges));
+ router.post('/api/finance/student/:studentId/charges', withRoles(['admin'], createCharge));
+ router.post('/api/finance/student/:studentId/charges/:chargeId/cancel', withRoles(['admin'], cancelCharge));
+diff --git a/src/routes/package-adjustments.ts b/src/routes/package-adjustments.ts
+new file mode 100644
+index 0000000..37229b3
+--- /dev/null
++++ b/src/routes/package-adjustments.ts
+@@ -0,0 +1,94 @@
++import { fail, ok } from '../lib/response';
++import { readJson } from '../lib/validate';
++import type { CustomRequest, Env } from '../types/env';
++
++type AdjustmentInput = {
++  quantity_delta?: unknown;
++  expected_remaining_lessons?: unknown;
++  reason?: unknown;
++  request_id?: unknown;
++};
++
++type Adjustment = {
++  user_id: number;
++  quantity_delta: number;
++  reason: string;
++  previous_lessons: number;
++  remaining_lessons: number;
++};
++
++export async function adjustPackageLessons(request: CustomRequest, env: Env) {
++  if (!request.user) return fail('Yetkilendirme gerekli.', 401);
++  const userId = request.user.id;
++  const studentId = Number(request.params.studentId);
++  const packageId = Number(request.params.packageId);
++  if (!Number.isSafeInteger(studentId) || studentId < 1 || !Number.isSafeInteger(packageId) || packageId < 1) {
++    return fail('Öğrenci veya paket numarası geçersiz.', 400);
++  }
++
++  const input = await readJson<AdjustmentInput>(request);
++  const delta = input?.quantity_delta;
++  const previous = input?.expected_remaining_lessons;
++  const reason = typeof input?.reason === 'string' ? input.reason.trim() : '';
++  const requestId = input?.request_id;
++  if (typeof delta !== 'number' || !Number.isSafeInteger(delta) || delta === 0 ||
++      typeof previous !== 'number' || !Number.isSafeInteger(previous) || previous < 0 ||
++      !reason || reason.length > 180 || typeof requestId !== 'string' ||
++      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(requestId)) {
++    return fail('Ders adedi veya işlem açıklaması geçersiz.', 422);
++  }
++
++  const remaining = previous + delta;
++  if (!Number.isSafeInteger(remaining) || remaining < 0) {
++    return fail('Kalan ders hakkı sıfırın altına inemez veya sayı sınırını aşamaz.', 422);
++  }
++
++  // A unique attempt identifies the audit row created by this batch alone.
++  const attemptId = crypto.randomUUID();
++  const auditScope = "action = 'package.adjust_lessons' AND table_name = 'packages' AND record_id = ?";
++  const auditForAttempt = `SELECT 1 FROM audit_logs
++    WHERE ${auditScope} AND json_extract(details, '$.attempt_id') = ?`;
++  const [, , , result] = await env.DB.batch<Adjustment>([
++    env.DB.prepare(`
++      INSERT INTO audit_logs (user_id, action, table_name, record_id, details)
++      SELECT ?, 'package.adjust_lessons', 'packages', p.id, ?
++      FROM packages p
++      WHERE p.id = ? AND p.student_id = ? AND p.remaining_lessons = ?
++        AND p.status = 'active' AND (p.expires_at IS NULL OR date(p.expires_at) >= date('now', '+3 hours'))
++        AND NOT EXISTS (SELECT 1 FROM audit_logs WHERE ${auditScope}
++                        AND json_extract(details, '$.request_id') = ?)
++    `).bind(userId, JSON.stringify({
++      request_id: requestId, attempt_id: attemptId, student_id: studentId,
++      quantity_delta: delta, reason, previous_lessons: previous, remaining_lessons: remaining,
++    }), packageId, studentId, previous, packageId, requestId),
++    env.DB.prepare(`
++      UPDATE packages SET remaining_lessons = ?, updated_at = CURRENT_TIMESTAMP
++      WHERE id = ? AND EXISTS (${auditForAttempt})
++    `).bind(remaining, packageId, packageId, attemptId),
++    env.DB.prepare(`
++      INSERT INTO package_transactions
++        (package_id, student_id, transaction_type, quantity_delta, description, created_by_user_id)
++      SELECT ?, ?, 'correction', ?, ?, ? WHERE EXISTS (${auditForAttempt})
++    `).bind(packageId, studentId, delta, reason, userId, packageId, attemptId),
++    env.DB.prepare(`
++      SELECT user_id,
++             json_extract(details, '$.quantity_delta') AS quantity_delta,
++             json_extract(details, '$.reason') AS reason,
++             json_extract(details, '$.previous_lessons') AS previous_lessons,
++             json_extract(details, '$.remaining_lessons') AS remaining_lessons
++      FROM audit_logs WHERE ${auditScope}
++        AND json_extract(details, '$.request_id') = ?
++        AND json_extract(details, '$.student_id') = ?
++    `).bind(packageId, requestId, studentId),
++  ]);
++
++  const adjustment = result.results[0];
++  if (!adjustment) {
++    return fail('Paket kullanıma açık değil veya ders hakkı değişti. Listeyi yenileyip tekrar deneyin.', 409);
++  }
++  if (adjustment.user_id !== userId || adjustment.quantity_delta !== delta ||
++      adjustment.previous_lessons !== previous || adjustment.reason !== reason) {
++    return fail('Bu istek numarası farklı bir işlemde kullanıldı.', 409);
++  }
++  return ok({ remaining_lessons: adjustment.remaining_lessons });
++}
+diff --git a/test/package-adjustments.test.ts b/test/package-adjustments.test.ts
+new file mode 100644
+index 0000000..181e6af
+--- /dev/null
++++ b/test/package-adjustments.test.ts
+@@ -0,0 +1,90 @@
++import { env, SELF } from 'cloudflare:test';
++import { expect, it } from 'vitest';
++
++const origin = 'https://iceglide.test';
++
++async function session(email = 'admin@test.invalid') {
++  const response = await SELF.fetch(origin + '/api/auth/login', {
++    method: 'POST',
++    body: JSON.stringify({ email, password: 'Test1234!' }),
++  });
++  const result = await response.json<{ data: { token: string } }>();
++  return { Authorization: `Bearer ${result.data.token}` };
++}
++
++const adjustment = (delta: number, previous = 8) => ({
++  quantity_delta: delta,
++  expected_remaining_lessons: previous,
++  reason: 'Ders hakkı düzeltmesi',
++  request_id: crypto.randomUUID(),
++});
++
++function adjust(headers: Record<string, string>, body: ReturnType<typeof adjustment>, studentId = 101) {
++  return SELF.fetch(origin + `/api/packages/student/${studentId}/301/lesson-adjustments`, {
++    method: 'POST', headers, body: JSON.stringify(body),
++  });
++}
++
++it('adds and removes rights and records the correction without creating attendance', async () => {
++  const headers = await session('coach@test.invalid');
++  await env.DB.prepare('UPDATE packages SET total_lessons = 10, expires_at = NULL WHERE id = 301').run();
++  expect(await (await adjust(headers, adjustment(3))).json()).toMatchObject({ data: { remaining_lessons: 11 } });
++  expect(await (await adjust(headers, adjustment(-2, 11))).json()).toMatchObject({ data: { remaining_lessons: 9 } });
++  expect(await env.DB.prepare('SELECT total_lessons, remaining_lessons FROM packages WHERE id = 301').first())
++    .toEqual({ total_lessons: 10, remaining_lessons: 9 });
++  expect(await env.DB.prepare(`
++    SELECT transaction_type, quantity_delta, lesson_instance_id, attendance_id, description, created_by_user_id
++    FROM package_transactions WHERE package_id = 301 ORDER BY id
++  `).all()).toMatchObject({
++    results: [3, -2].map((quantity_delta) => ({
++      quantity_delta, transaction_type: 'correction', lesson_instance_id: null, attendance_id: null,
++      description: 'Ders hakkı düzeltmesi', created_by_user_id: 2,
++    })),
++  });
++  expect(await env.DB.prepare('SELECT id FROM attendances').first()).toBeNull();
++});
++
++it('applies concurrent retries once and prevents stale or conflicting updates', async () => {
++  const headers = await session();
++  await env.DB.prepare('UPDATE packages SET expires_at = NULL WHERE id = 301').run();
++  const body = adjustment(-1);
++  const responses = await Promise.all([adjust(headers, body), adjust(headers, body)]);
++  expect(await Promise.all(responses.map((response) => response.json()))).toMatchObject([
++    { data: { remaining_lessons: 7 } }, { data: { remaining_lessons: 7 } },
++  ]);
++  expect((await adjust(headers, { ...body, reason: 'Farklı açıklama' })).status).toBe(409);
++  expect((await adjust(headers, adjustment(1))).status).toBe(409);
++  expect(await env.DB.prepare('SELECT count(*) AS count FROM package_transactions WHERE package_id = 301').first())
++    .toEqual({ count: 1 });
++  expect(await env.DB.prepare("SELECT count(*) AS count FROM audit_logs WHERE action = 'package.adjust_lessons'").first())
++    .toEqual({ count: 1 });
++});
++
++it('rejects unauthorized, mismatched, expired and negative changes', async () => {
++  const headers = await session();
++  await env.DB.prepare("UPDATE packages SET expires_at = '2000-01-01' WHERE id = 301").run();
++  expect((await adjust(await session('student-a@test.invalid'), adjustment(1))).status).toBe(403);
++  expect((await adjust(headers, adjustment(1))).status).toBe(409);
++  await env.DB.prepare('UPDATE packages SET expires_at = NULL WHERE id = 301').run();
++  expect((await adjust(headers, adjustment(1), 102)).status).toBe(409);
++  expect((await adjust(headers, adjustment(-9))).status).toBe(422);
++  expect(await env.DB.prepare('SELECT remaining_lessons FROM packages WHERE id = 301').first())
++    .toEqual({ remaining_lessons: 8 });
++});
++
++it('rolls back the balance and audit row if the correction cannot be recorded', async () => {
++  const headers = await session();
++  await env.DB.batch([
++    env.DB.prepare('UPDATE packages SET expires_at = NULL WHERE id = 301'),
++    env.DB.prepare(`CREATE TRIGGER test_reject_correction BEFORE INSERT ON package_transactions
++                    BEGIN SELECT RAISE(ABORT, 'test correction failure'); END`),
++  ]);
++  try {
++    expect((await adjust(headers, adjustment(1))).status).toBe(500);
++    expect(await env.DB.prepare('SELECT remaining_lessons FROM packages WHERE id = 301').first())
++      .toEqual({ remaining_lessons: 8 });
++    expect(await env.DB.prepare("SELECT id FROM audit_logs WHERE action = 'package.adjust_lessons'").first()).toBeNull();
++  } finally {
++    await env.DB.prepare('DROP TRIGGER test_reject_correction').run();
++  }
++});
