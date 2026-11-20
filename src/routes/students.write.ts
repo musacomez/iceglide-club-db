@@ -206,7 +206,7 @@ export async function createStudent(request: CustomRequest, env: Env) {
   }
   if (v.group_id) {
     statements.push(
-      env.DB.prepare('INSERT INTO group_students (student_id, group_id, end_date, is_primary) VALUES (?, ?, NULL, 1)')
+      env.DB.prepare("INSERT INTO group_students (student_id, group_id, start_date, end_date, is_primary) VALUES (?, ?, date('now', '+3 hours'), NULL, 1)")
         .bind(studentId, v.group_id),
     );
   }
@@ -317,11 +317,11 @@ export async function updateStudent(request: CustomRequest, env: Env) {
     ).bind(id).first<{ group_id: number }>();
     if ((current?.group_id ?? null) !== v.group_id) {
       statements.push(
-        env.DB.prepare("UPDATE group_students SET end_date = date('now') WHERE student_id = ? AND end_date IS NULL AND is_primary = 1").bind(id),
+        env.DB.prepare("UPDATE group_students SET end_date = date('now', '+3 hours') WHERE student_id = ? AND end_date IS NULL AND is_primary = 1").bind(id),
       );
       if (v.group_id) {
         statements.push(
-          env.DB.prepare('INSERT INTO group_students (student_id, group_id, end_date, is_primary) VALUES (?, ?, NULL, 1)').bind(id, v.group_id),
+          env.DB.prepare("INSERT INTO group_students (student_id, group_id, start_date, end_date, is_primary) VALUES (?, ?, date('now', '+3 hours'), NULL, 1)").bind(id, v.group_id),
         );
       }
     }

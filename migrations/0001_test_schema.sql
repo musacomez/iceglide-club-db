@@ -57,6 +57,7 @@ CREATE TABLE groups (
 CREATE TABLE group_students (
   student_id INTEGER NOT NULL,
   group_id INTEGER NOT NULL,
+  start_date TEXT NOT NULL,
   end_date TEXT,
   is_primary INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (student_id) REFERENCES students(id),
