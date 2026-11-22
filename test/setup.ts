@@ -73,9 +73,9 @@ async function seed() {
 
     db.prepare(`
       INSERT INTO student_instructors
-        (student_id, instructor_user_id, is_primary, end_date)
+        (student_id, instructor_user_id, start_date, is_primary, end_date)
       VALUES
-        (101, 3, 1, NULL)
+        (101, 3, '2026-01-01', 1, NULL)
     `),
 
     db.prepare(`

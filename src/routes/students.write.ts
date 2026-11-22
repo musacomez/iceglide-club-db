@@ -212,7 +212,7 @@ export async function createStudent(request: CustomRequest, env: Env) {
   }
   (v.instructorIds ?? []).forEach((id, i) => {
     statements.push(
-      env.DB.prepare('INSERT INTO student_instructors (student_id, instructor_user_id, is_primary, end_date) VALUES (?, ?, ?, NULL)')
+      env.DB.prepare("INSERT INTO student_instructors (student_id, instructor_user_id, start_date, is_primary, end_date) VALUES (?, ?, date('now', '+3 hours'), ?, NULL)")
         .bind(studentId, id, i === 0 ? 1 : 0),
     );
   });
@@ -350,7 +350,7 @@ export async function updateStudent(request: CustomRequest, env: Env) {
     for (const uid of v.instructorIds) {
       if (!current.has(uid)) {
         statements.push(
-          env.DB.prepare('INSERT INTO student_instructors (student_id, instructor_user_id, is_primary, end_date) VALUES (?, ?, 0, NULL)').bind(id, uid),
+          env.DB.prepare("INSERT INTO student_instructors (student_id, instructor_user_id, start_date, is_primary, end_date) VALUES (?, ?, date('now', '+3 hours'), 0, NULL)").bind(id, uid),
         );
       }
     }

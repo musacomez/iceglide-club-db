@@ -193,6 +193,7 @@ CREATE TABLE payments (
 CREATE TABLE student_instructors (
   student_id INTEGER NOT NULL,
   instructor_user_id INTEGER NOT NULL,
+  start_date TEXT NOT NULL,
   is_primary INTEGER NOT NULL DEFAULT 0,
   end_date TEXT,
   FOREIGN KEY (student_id) REFERENCES students(id),
