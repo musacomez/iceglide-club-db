@@ -26,6 +26,7 @@ async function seed() {
     db.prepare('DELETE FROM students'),
     db.prepare('DELETE FROM private_lesson_requests'),
     db.prepare('DELETE FROM coach_compensation'),
+    db.prepare('DELETE FROM club_chat_messages'),
     db.prepare('DELETE FROM users'),
     db.prepare('DELETE FROM locations'),
     db.prepare('DELETE FROM groups'),

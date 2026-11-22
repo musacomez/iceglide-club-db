@@ -20,6 +20,7 @@ import { getStudentAccount, saveStudentAccount } from './routes/student-account'
 import { createStudent, updateStudent } from './routes/students.write';
 import { createLesson, updateLesson } from './routes/lessons.write';
 import { listCoaches, saveCoach } from './routes/coaches';
+import { listClubMessages, sendClubMessage, hideClubMessage } from './routes/club-chat';
 import { getLookups } from './routes/lookups';
 
 const router = AutoRouter();
@@ -93,6 +94,10 @@ router.post('/api/finance/student/:studentId/charges', withRoles(['admin'], crea
 router.post('/api/finance/student/:studentId/charges/:chargeId/cancel', withRoles(['admin'], cancelCharge));
 router.post('/api/finance/student/:studentId/charges/:chargeId/payments', withRoles(['admin'], receivePayment));
 router.get('/api/payments/student/:studentId', withAuth(listStudentPayments));
+
+router.get('/api/club-chat/messages', withAuth(listClubMessages));
+router.post('/api/club-chat/messages', withAuth(sendClubMessage));
+router.delete('/api/club-chat/messages/:id', withRoles(['admin'], hideClubMessage));
 
 router.all('*', () => fail('API endpoint bulunamadı.', 404));
 
