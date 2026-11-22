@@ -16,6 +16,7 @@ import { listCharges, createCharge, cancelCharge, receivePayment } from './route
 import { listStudentPayments } from './routes/payments';
 import { dashboardSummary } from './routes/dashboard';
 import { me } from './routes/me';
+import { getStudentAccount, saveStudentAccount } from './routes/student-account';
 import { createStudent, updateStudent } from './routes/students.write';
 import { createLesson, updateLesson } from './routes/lessons.write';
 import { listCoaches, saveCoach } from './routes/coaches';
@@ -66,6 +67,9 @@ router.get('/api/students', withAuth(listStudents));
 router.get('/api/students/:id', withAuth(getStudent));
 router.post('/api/students', withRoles(['admin', 'head_coach'], createStudent));
 router.patch('/api/students/:id', withRoles(['admin', 'head_coach'], updateStudent));
+router.get('/api/students/:id/account', withRoles(['admin'], getStudentAccount));
+router.post('/api/students/:id/account', withRoles(['admin'], saveStudentAccount));
+router.patch('/api/students/:id/account', withRoles(['admin'], saveStudentAccount));
 router.get('/api/lessons', withAuth(listLessons));
 router.get('/api/lessons/:id', withAuth(getLesson));
 router.get('/api/lessons/:id/attendance', withAuth(attendanceList));
