@@ -3,7 +3,7 @@ import { isPositiveInt, isValidDate, readJson } from '../lib/validate';
 import type { CustomRequest, Env } from '../types/env';
 
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const PAID = `COALESCE((
+export const PAID = `COALESCE((
   SELECT SUM(a.amount_cents) FROM payment_allocations a
   JOIN payments p ON p.id = a.payment_id
   WHERE a.charge_id = c.id AND p.status = 'completed'
@@ -32,6 +32,17 @@ export async function listCharges(request: CustomRequest, env: Env) {
     FROM student_charges c WHERE c.student_id = ?
     ORDER BY c.status = 'active' DESC, c.due_date, c.id DESC
   `).bind(studentId).all();
+  return ok(results);
+}
+
+export async function listOwnOpenCharges(request: CustomRequest, env: Env) {
+  const { results } = await env.DB.prepare(`
+    SELECT c.id, c.charge_type, c.description, c.amount_cents, c.due_date, c.status,
+           ${PAID} AS paid_cents, c.amount_cents - ${PAID} AS balance_cents
+    FROM student_charges c JOIN students s ON s.id = c.student_id
+    WHERE s.user_id = ? AND c.status = 'active' AND c.amount_cents > ${PAID}
+    ORDER BY c.due_date IS NULL, c.due_date, c.id
+  `).bind(request.user!.id).all();
   return ok(results);
 }
 

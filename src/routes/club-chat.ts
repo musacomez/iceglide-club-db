@@ -1,6 +1,7 @@
 import { fail, json, ok } from '../lib/response';
 import { readJson } from '../lib/validate';
 import type { CustomRequest, Env, UserRole } from '../types/env';
+import { deliverPushJobs, enqueueChatPush, pushSettings } from '../lib/push';
 
 type Message = {
   id: number;
@@ -37,7 +38,7 @@ export async function listClubMessages(request: CustomRequest, env: Env) {
   } }, 200, { 'Cache-Control': 'private, no-store' });
 }
 
-export async function sendClubMessage(request: CustomRequest, env: Env) {
+export async function sendClubMessage(request: CustomRequest, env: Env, ctx: ExecutionContext) {
   const body = await readJson<{ message?: unknown }>(request);
   const message = typeof body?.message === 'string' ? body.message.trim() : '';
   if (!message || [...message].length > 1000 || message.includes('\0')) {
@@ -54,7 +55,13 @@ export async function sendClubMessage(request: CustomRequest, env: Env) {
     RETURNING id
   `).bind(author, message, author).first<{ id: number }>();
 
-  return inserted ? ok(inserted, 201) : fail('Yeni mesaj için birkaç saniye bekleyin.', 429);
+  if (!inserted) return fail('Yeni mesaj için birkaç saniye bekleyin.', 429);
+  if (pushSettings(env)) {
+    ctx.waitUntil(enqueueChatPush(env, inserted.id, author)
+      .then(() => deliverPushJobs(env))
+      .catch(() => console.error('Push processing failed for chat message', inserted.id)));
+  }
+  return ok(inserted, 201);
 }
 
 export async function hideClubMessage(request: CustomRequest, env: Env) {

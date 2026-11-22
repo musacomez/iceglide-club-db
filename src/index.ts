@@ -12,7 +12,7 @@ import { listStudentPackages } from './routes/packages';
 import { assignStudentPackage, listPackageTypes } from './routes/packages.write';
 import { saveGroup } from './routes/groups';
 import { listManagedPackageTypes, savePackageType } from './routes/package-types';
-import { listCharges, createCharge, cancelCharge, receivePayment } from './routes/finance';
+import { listCharges, listOwnOpenCharges, createCharge, cancelCharge, receivePayment } from './routes/finance';
 import { listStudentPayments } from './routes/payments';
 import { dashboardSummary } from './routes/dashboard';
 import { me } from './routes/me';
@@ -22,28 +22,30 @@ import { createLesson, updateLesson } from './routes/lessons.write';
 import { listCoaches, saveCoach } from './routes/coaches';
 import { listClubMessages, sendClubMessage, hideClubMessage } from './routes/club-chat';
 import { getLookups } from './routes/lookups';
+import { getPushSettings, savePushDevice, deletePushDevice, notifyStudent } from './routes/push';
+import { runPushSchedule } from './lib/push';
 
 const router = AutoRouter();
 
-function withAuth(handler: (request: CustomRequest, env: Env) => Promise<Response>) {
-  return async (request: Request, env: Env) => {
+function withAuth(handler: (request: CustomRequest, env: Env, ctx: ExecutionContext) => Promise<Response>) {
+  return async (request: Request, env: Env, ctx: ExecutionContext) => {
     const req = request as CustomRequest;
     const authError = await authenticate(req, env);
     if (authError) return authError;
-    return handler(req, env);
+    return handler(req, env, ctx);
   };
 }
 
 function withRoles(
   roles: NonNullable<CustomRequest['user']>['role'][],
-  handler: (request: CustomRequest, env: Env) => Promise<Response>,
+  handler: (request: CustomRequest, env: Env, ctx: ExecutionContext) => Promise<Response>,
 ) {
-  return withAuth(async (request, env) => {
+  return withAuth(async (request, env, ctx) => {
     if (!request.user || !roles.includes(request.user.role)) {
       return fail('Bu işlem için yetkiniz yok.', 403);
     }
 
-    return handler(request, env);
+    return handler(request, env, ctx);
   });
 }
 
@@ -89,6 +91,7 @@ router.post('/api/manage/package-types', withRoles(['admin'], savePackageType));
 router.patch('/api/manage/package-types/:typeId', withRoles(['admin'], savePackageType));
 router.get('/api/packages/types', withRoles(['admin', 'head_coach'], listPackageTypes));
 router.post('/api/packages/student/:studentId', withRoles(['admin', 'head_coach'], assignStudentPackage));
+router.get('/api/finance/me/open-charges', withRoles(['student'], listOwnOpenCharges));
 router.get('/api/finance/student/:studentId/charges', withRoles(['admin'], listCharges));
 router.post('/api/finance/student/:studentId/charges', withRoles(['admin'], createCharge));
 router.post('/api/finance/student/:studentId/charges/:chargeId/cancel', withRoles(['admin'], cancelCharge));
@@ -99,9 +102,18 @@ router.get('/api/club-chat/messages', withAuth(listClubMessages));
 router.post('/api/club-chat/messages', withAuth(sendClubMessage));
 router.delete('/api/club-chat/messages/:id', withRoles(['admin'], hideClubMessage));
 
+router.get('/api/push/settings', withAuth(getPushSettings));
+router.put('/api/push/device', withAuth(savePushDevice));
+router.delete('/api/push/device', withAuth(deletePushDevice));
+router.post('/api/students/:id/notify', withRoles(['admin'], notifyStudent));
+
 router.all('*', () => fail('API endpoint bulunamadı.', 404));
 
 export default {
+  async scheduled(event: ScheduledController, env: Env) {
+    await runPushSchedule(env, event.scheduledTime);
+  },
+
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(request, env) });
