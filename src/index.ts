@@ -10,6 +10,7 @@ import { listLessons, getLesson, attendanceList } from './routes/lessons';
 import { createAttendance } from './routes/attendance';
 import { listStudentPackages } from './routes/packages';
 import { assignStudentPackage, listPackageTypes } from './routes/packages.write';
+import { adjustPackageLessons } from './routes/package-adjustments';
 import { saveGroup } from './routes/groups';
 import { listManagedPackageTypes, savePackageType } from './routes/package-types';
 import { listCharges, listOwnOpenCharges, createCharge, cancelCharge, receivePayment } from './routes/finance';
@@ -91,6 +92,8 @@ router.post('/api/manage/package-types', withRoles(['admin'], savePackageType));
 router.patch('/api/manage/package-types/:typeId', withRoles(['admin'], savePackageType));
 router.get('/api/packages/types', withRoles(['admin', 'head_coach'], listPackageTypes));
 router.post('/api/packages/student/:studentId', withRoles(['admin', 'head_coach'], assignStudentPackage));
+router.post('/api/packages/student/:studentId/:packageId/lesson-adjustments',
+  withRoles(['admin', 'head_coach'], adjustPackageLessons));
 router.get('/api/finance/me/open-charges', withRoles(['student'], listOwnOpenCharges));
 router.get('/api/finance/student/:studentId/charges', withRoles(['admin'], listCharges));
 router.post('/api/finance/student/:studentId/charges', withRoles(['admin'], createCharge));
